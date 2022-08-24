@@ -25,7 +25,7 @@ go 1.18
 require (
 	cloud.google.com/go/bigquery v1.34.1
 	cloud.google.com/go/datastore v1.8.0
-	cloud.google.com/go/pubsub v1.23.1
+	cloud.google.com/go/pubsub v1.25.0
 	cloud.google.com/go/storage v1.23.0
 	github.com/docker/go-connections v0.4.0
 	github.com/go-sql-driver/mysql v1.6.0
@@ -44,10 +44,10 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
 	golang.org/x/sys v0.0.0-20220624220833-87e55d714810
 	golang.org/x/text v0.3.7
-	google.golang.org/api v0.86.0
-	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f
-	google.golang.org/grpc v1.47.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/api v0.93.0
+	google.golang.org/genproto v0.0.0-20220815135757-37a418bb8959
+	google.golang.org/grpc v1.48.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/retry.v1 v1.0.3
 	gopkg.in/yaml.v2 v2.4.0
 )
