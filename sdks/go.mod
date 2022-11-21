@@ -40,13 +40,13 @@ require (
 	github.com/testcontainers/testcontainers-go v0.13.0
 	github.com/xitongsys/parquet-go v1.6.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20220315005136-aec0fe3e777c
-	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
-	golang.org/x/sys v0.0.0-20220624220833-87e55d714810
-	golang.org/x/text v0.3.7
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+	golang.org/x/text v0.4.0
 	google.golang.org/api v0.86.0
 	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/retry.v1 v1.0.3
 	gopkg.in/yaml.v2 v2.4.0
