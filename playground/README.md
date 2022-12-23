@@ -31,6 +31,11 @@ The following requirements are needed for development, testing, and deploying.
 - Go protobuf dependencies (See [Go gRPC Quickstart](https://grpc.io/docs/languages/go/quickstart/))
 - Dart protobuf dependencies (See [Dart gRPC Quickstart](https://grpc.io/docs/languages/dart/))
 - [buf](https://docs.buf.build/installation)
+- [Docker](https://docs.docker.com/desktop/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+- [gcloud CLI](https://cloud.google.com/sdk/docs/install)
+- [gcloud Beta Commands](https://cloud.google.com/sdk/gcloud/reference/components/install)
+- [Cloud Datastore Emulator](https://cloud.google.com/sdk/gcloud/reference/components/install)
 
 # Available Gradle Tasks
 
@@ -53,6 +58,62 @@ cd beam
 ```
 cd beam
 ./gradlew playground:generateProto
+```
+
+## Run local environment using docker compose
+
+### Router only
+
+Start:
+
+```bash
+cd beam
+./gradlew playground:backend:containers:router:dockerComposeLocalUp
+```
+
+Stop:
+
+```bash
+cd beam
+./gradlew playground:backend:containers:router:dockerComposeLocalDown
+```
+
+### Router, runners, and frontend
+
+1. Edit `/playground/frontend/lib/config.g.dart` to set your local backend host and ports
+found in `/playground/docker-compose.local.yaml`.
+2. To start, run:
+
+```bash
+cd beam
+./gradlew playground:dockerComposeLocalUp
+```
+
+3. To stop, run:
+
+```bash
+cd beam
+./gradlew playground:dockerComposeLocalDown
+```
+
+If you do not need particular runners, comment out:
+1. Dependencies on them in `/playground/build.gradle.kts` in `dockerComposeLocalUp` task.
+2. Their Docker image configurations in `/playground/docker-compose.local.yaml`.
+
+## Removing old snippets
+
+Run the method to remove unused code snippets from the Cloud Datastore. Unused snippets are snippets that are out of date. If the last visited date property less or equals than the current date minus dayDiff parameter then a snippet is out of date
+
+```
+cd beam
+./gradlew playground:backend:removeUnusedSnippet -DdayDiff={int} -DprojectId={string}
+```
+
+## Run playground tests without cache
+
+```
+cd beam
+ ./gradlew playground:backend:testWithoutCache
 ```
 
 # Deployment

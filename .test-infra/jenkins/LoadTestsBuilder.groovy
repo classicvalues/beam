@@ -43,7 +43,8 @@ class LoadTestsBuilder {
 
 
   static void loadTest(context, String title, Runner runner, SDK sdk, Map<String, ?> options,
-      String mainClass, List<String> jobSpecificSwitches = null) {
+      String mainClass, List<String> jobSpecificSwitches = null, String requirementsTxtFile = null,
+      String pythonVersion = null) {
     options.put('runner', runner.option)
     InfluxDBCredentialsHelper.useCredentials(context)
 
@@ -52,7 +53,7 @@ class LoadTestsBuilder {
       gradle {
         rootBuildScriptDir(commonJobProperties.checkoutDir)
         setGradleTask(delegate, runner, sdk, options, mainClass,
-            jobSpecificSwitches)
+            jobSpecificSwitches, requirementsTxtFile, pythonVersion)
         commonJobProperties.setGradleSwitches(delegate)
       }
     }
@@ -60,9 +61,23 @@ class LoadTestsBuilder {
 
   static String parseOptions(Map<String, ?> options) {
     options.collect { entry ->
+
+      if (entry.key.matches(".*\\s.*")) {
+        throw new IllegalArgumentException("""
+          Encountered invalid option name '${entry.key}'. Names must not
+          contain whitespace.
+          """)
+      }
+
       // Flags are indicated by null values
       if (entry.value == null) {
         "--${entry.key}"
+      } else if (entry.value.toString().matches(".*\\s.*") &&
+      !entry.value.toString().matches("'[^']*'")) {
+        throw new IllegalArgumentException("""
+          Option '${entry.key}' has an invalid value, '${entry.value}'. Values
+          must not contain whitespace, or they must be wrapped in singe quotes.
+          """)
       } else {
         "--${entry.key}=$entry.value".replace('\"', '\\\"').replace('\'', '\\\'')
       }
@@ -78,11 +93,15 @@ class LoadTestsBuilder {
   }
 
   private static void setGradleTask(context, Runner runner, SDK sdk, Map<String, ?> options,
-      String mainClass, List<String> jobSpecificSwitches) {
+      String mainClass, List<String> jobSpecificSwitches, String requirementsTxtFile = null,
+      String pythonVersion = null) {
     context.tasks(getGradleTaskName(sdk))
     context.switches("-PloadTest.mainClass=\"${mainClass}\"")
     context.switches("-Prunner=${runner.getDependencyBySDK(sdk)}")
     context.switches("-PloadTest.args=\"${parseOptions(options)}\"")
+    if (requirementsTxtFile != null){
+      context.switches("-PloadTest.requirementsTxtFile=\"${requirementsTxtFile}\"")
+    }
     if (jobSpecificSwitches != null) {
       jobSpecificSwitches.each {
         context.switches(it)
@@ -90,7 +109,12 @@ class LoadTestsBuilder {
     }
 
     if (sdk == SDK.PYTHON) {
-      context.switches("-PpythonVersion=${LOAD_TEST_PYTHON_VERSION}")
+      if (pythonVersion == null) {
+        context.switches("-PpythonVersion=${LOAD_TEST_PYTHON_VERSION}")
+      }
+      else {
+        context.switches("-PpythonVersion=${pythonVersion}")
+      }
     }
   }
 

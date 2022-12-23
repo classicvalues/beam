@@ -37,7 +37,7 @@ const (
 )
 
 func init() {
-	register.DoFn4x0[context.Context, []byte, func(string), func(string)]((*executeBundleFn)(nil))
+	register.DoFn4x0[context.Context, string, func(string), func(string)]((*executeBundleFn)(nil))
 	register.Emitter1[string]()
 }
 
@@ -57,7 +57,7 @@ func (fn *executeBundleFn) Setup() {
 	fn.successesCount = beam.NewCounter(fn.String(), baseMetricPrefix+"success_count")
 }
 
-func (fn *executeBundleFn) ProcessElement(ctx context.Context, inputBundleBody []byte, emitSuccess, emitFailure func(string)) {
+func (fn *executeBundleFn) ProcessElement(ctx context.Context, inputBundleBody string, emitSuccess, emitFailure func(string)) {
 	response, err := executeAndRecordLatency(ctx, &fn.latencyMs, func() (*http.Response, error) {
 		return fn.client.executeBundle(fn.FhirStorePath, inputBundleBody)
 	})
@@ -79,8 +79,8 @@ func (fn *executeBundleFn) ProcessElement(ctx context.Context, inputBundleBody [
 
 func (fn *executeBundleFn) processResponseBody(ctx context.Context, body string, emitSuccess, emitFailure func(string)) {
 	var bodyFields struct {
-		Type    string        `json:"type"`
-		Entries []interface{} `json:"entry"`
+		Type    string `json:"type"`
+		Entries []any  `json:"entry"`
 	}
 
 	err := json.NewDecoder(strings.NewReader(body)).Decode(&bodyFields)

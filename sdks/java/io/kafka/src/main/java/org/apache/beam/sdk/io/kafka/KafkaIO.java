@@ -413,9 +413,8 @@ import org.slf4j.LoggerFactory;
  * to processing records.
  *
  * <p>{@link ReadSourceDescriptors#commitOffsets()} enables committing offset after processing the
- * record. Note that if the {@code isolation.level} is set to "read_committed" or {@link
- * ConsumerConfig#ENABLE_AUTO_COMMIT_CONFIG} is set in the consumer config, the {@link
- * ReadSourceDescriptors#commitOffsets()} will be ignored.
+ * record. Note that if {@link ConsumerConfig#ENABLE_AUTO_COMMIT_CONFIG} is set in the consumer
+ * config, the {@link ReadSourceDescriptors#commitOffsets()} will be ignored.
  *
  * <p>{@link ReadSourceDescriptors#withExtractOutputTimestampFn(SerializableFunction)} is used to
  * compute the {@code output timestamp} for a given {@link KafkaRecord} and controls the watermark
@@ -545,9 +544,6 @@ import org.slf4j.LoggerFactory;
  * href="https://github.com/apache/beam/blob/master/sdks/java/io/kafka/OWNERS">here</a>.
  */
 @Experimental(Kind.SOURCE_SINK)
-@SuppressWarnings({
-  "rawtypes" // TODO(https://github.com/apache/beam/issues/20447)
-})
 public class KafkaIO {
 
   /**
@@ -629,7 +625,6 @@ public class KafkaIO {
    */
   @AutoValue
   @AutoValue.CopyAnnotations
-  @SuppressWarnings({"rawtypes"})
   public abstract static class Read<K, V>
       extends PTransform<PBegin, PCollection<KafkaRecord<K, V>>> {
     @Pure
@@ -682,10 +677,10 @@ public class KafkaIO {
     abstract @Nullable Map<String, Object> getOffsetConsumerConfig();
 
     @Pure
-    abstract @Nullable DeserializerProvider getKeyDeserializerProvider();
+    abstract @Nullable DeserializerProvider<K> getKeyDeserializerProvider();
 
     @Pure
-    abstract @Nullable DeserializerProvider getValueDeserializerProvider();
+    abstract @Nullable DeserializerProvider<V> getValueDeserializerProvider();
 
     @Pure
     abstract @Nullable SerializableFunction<TopicPartition, Boolean> getCheckStopReadingFn();
@@ -729,28 +724,32 @@ public class KafkaIO {
 
       abstract Builder<K, V> setOffsetConsumerConfig(Map<String, Object> offsetConsumerConfig);
 
-      abstract Builder<K, V> setKeyDeserializerProvider(DeserializerProvider deserializerProvider);
+      abstract Builder<K, V> setKeyDeserializerProvider(
+          DeserializerProvider<K> deserializerProvider);
 
       abstract Builder<K, V> setValueDeserializerProvider(
-          DeserializerProvider deserializerProvider);
+          DeserializerProvider<V> deserializerProvider);
 
       abstract Builder<K, V> setCheckStopReadingFn(
           SerializableFunction<TopicPartition, Boolean> checkStopReadingFn);
 
       abstract Read<K, V> build();
 
-      static void setupExternalBuilder(Builder builder, Read.External.Configuration config) {
+      static <K, V> void setupExternalBuilder(
+          Builder<K, V> builder, Read.External.Configuration config) {
         ImmutableList.Builder<String> listBuilder = ImmutableList.builder();
         for (String topic : config.topics) {
           listBuilder.add(topic);
         }
         builder.setTopics(listBuilder.build());
 
-        Class keyDeserializer = resolveClass(config.keyDeserializer);
+        Class<Deserializer<K>> keyDeserializer =
+            (Class<Deserializer<K>>) resolveClass(config.keyDeserializer);
         builder.setKeyDeserializerProvider(LocalDeserializerProvider.of(keyDeserializer));
         builder.setKeyCoder(resolveCoder(keyDeserializer));
 
-        Class valueDeserializer = resolveClass(config.valueDeserializer);
+        Class<Deserializer<V>> valueDeserializer =
+            (Class<Deserializer<V>>) resolveClass(config.valueDeserializer);
         builder.setValueDeserializerProvider(LocalDeserializerProvider.of(valueDeserializer));
         builder.setValueCoder(resolveCoder(valueDeserializer));
 
@@ -799,7 +798,7 @@ public class KafkaIO {
         builder.setDynamicRead(false);
       }
 
-      private static Coder resolveCoder(Class deserializer) {
+      private static <T> Coder<T> resolveCoder(Class<Deserializer<T>> deserializer) {
         for (Method method : deserializer.getDeclaredMethods()) {
           if (method.getName().equals("deserialize")) {
             Class<?> returnType = method.getReturnType();
@@ -807,11 +806,11 @@ public class KafkaIO {
               continue;
             }
             if (returnType.equals(byte[].class)) {
-              return NullableCoder.of(ByteArrayCoder.of());
+              return (Coder<T>) NullableCoder.of(ByteArrayCoder.of());
             } else if (returnType.equals(Integer.class)) {
-              return NullableCoder.of(VarIntCoder.of());
+              return (Coder<T>) NullableCoder.of(VarIntCoder.of());
             } else if (returnType.equals(Long.class)) {
-              return NullableCoder.of(VarLongCoder.of());
+              return (Coder<T>) NullableCoder.of(VarLongCoder.of());
             } else {
               throw new RuntimeException("Couldn't infer Coder from " + deserializer);
             }
@@ -1339,11 +1338,19 @@ public class KafkaIO {
       final KafkaIOReadImplementationCompatibilityResult compatibility =
           KafkaIOReadImplementationCompatibility.getCompatibility(this);
 
-      // For read from unbounded in a bounded manner, we actually are not going through Read or SDF.
+      // For a number of cases, we prefer using the UnboundedSource Kafka over the new SDF-based
+      // Kafka source, for example,
+      // * Experiments 'beam_fn_api_use_deprecated_read' and use_deprecated_read will result in
+      // legacy UnboundeSource being used.
+      // * Experiment 'use_unbounded_sdf_wrapper' will result in legacy UnboundeSource being used
+      // but will be wrapped by an SDF.
+      // * Some runners or selected features may not be compatible with SDF-based Kafka.
       if (ExperimentalOptions.hasExperiment(
               input.getPipeline().getOptions(), "beam_fn_api_use_deprecated_read")
           || ExperimentalOptions.hasExperiment(
               input.getPipeline().getOptions(), "use_deprecated_read")
+          || ExperimentalOptions.hasExperiment(
+              input.getPipeline().getOptions(), "use_unbounded_sdf_wrapper")
           || compatibility.supportsOnly(KafkaIOReadImplementation.LEGACY)
           || (compatibility.supports(KafkaIOReadImplementation.LEGACY)
               && runnerPrefersLegacyRead(input.getPipeline().getOptions()))) {
@@ -1554,7 +1561,7 @@ public class KafkaIO {
      */
     @VisibleForTesting
     static class GenerateKafkaSourceDescriptor extends DoFn<byte[], KafkaSourceDescriptor> {
-      GenerateKafkaSourceDescriptor(Read read) {
+      GenerateKafkaSourceDescriptor(Read<?, ?> read) {
         this.consumerConfig = read.getConsumerConfig();
         this.consumerFactoryFn = read.getConsumerFactoryFn();
         this.topics = read.getTopics();
@@ -1675,7 +1682,7 @@ public class KafkaIO {
       @Override
       public PTransform<PBegin, PCollection<KV<K, V>>> buildExternal(
           Read.External.Configuration config) {
-        Read.Builder<K, V> readBuilder = new AutoValue_KafkaIO_Read.Builder();
+        Read.Builder<K, V> readBuilder = new AutoValue_KafkaIO_Read.Builder<>();
         Read.Builder.setupExternalBuilder(readBuilder, config);
 
         return readBuilder.build().withoutMetadata();
@@ -1786,18 +1793,20 @@ public class KafkaIO {
       @Override
       public PTransform<PBegin, PCollection<Row>> buildExternal(
           Read.External.Configuration config) {
-        Read.Builder<K, V> readBuilder = new AutoValue_KafkaIO_Read.Builder();
+        Read.Builder<K, V> readBuilder = new AutoValue_KafkaIO_Read.Builder<>();
         Read.Builder.setupExternalBuilder(readBuilder, config);
 
-        Class keyDeserializer = resolveClass(config.keyDeserializer);
-        Coder keyCoder = Read.Builder.resolveCoder(keyDeserializer);
+        Class<Deserializer<K>> keyDeserializer =
+            (Class<Deserializer<K>>) resolveClass(config.keyDeserializer);
+        Coder<K> keyCoder = Read.Builder.resolveCoder(keyDeserializer);
         if (!(keyCoder instanceof NullableCoder
             && keyCoder.getCoderArguments().get(0) instanceof ByteArrayCoder)) {
           throw new RuntimeException(
               "ExternalWithMetadata transform only supports keys of type nullable(byte[])");
         }
-        Class valueDeserializer = resolveClass(config.valueDeserializer);
-        Coder valueCoder = Read.Builder.resolveCoder(valueDeserializer);
+        Class<Deserializer<V>> valueDeserializer =
+            (Class<Deserializer<V>>) resolveClass(config.valueDeserializer);
+        Coder<V> valueCoder = Read.Builder.resolveCoder(valueDeserializer);
         if (!(valueCoder instanceof NullableCoder
             && valueCoder.getCoderArguments().get(0) instanceof ByteArrayCoder)) {
           throw new RuntimeException(
@@ -1873,7 +1882,6 @@ public class KafkaIO {
   @Experimental(Kind.PORTABILITY)
   @AutoValue
   @AutoValue.CopyAnnotations
-  @SuppressWarnings({"rawtypes"})
   public abstract static class ReadSourceDescriptors<K, V>
       extends PTransform<PCollection<KafkaSourceDescriptor>, PCollection<KafkaRecord<K, V>>> {
 
@@ -1886,10 +1894,10 @@ public class KafkaIO {
     abstract @Nullable Map<String, Object> getOffsetConsumerConfig();
 
     @Pure
-    abstract @Nullable DeserializerProvider getKeyDeserializerProvider();
+    abstract @Nullable DeserializerProvider<K> getKeyDeserializerProvider();
 
     @Pure
-    abstract @Nullable DeserializerProvider getValueDeserializerProvider();
+    abstract @Nullable DeserializerProvider<V> getValueDeserializerProvider();
 
     @Pure
     abstract @Nullable Coder<K> getKeyCoder();
@@ -1936,10 +1944,10 @@ public class KafkaIO {
           @Nullable SerializableFunction<TopicPartition, Boolean> checkStopReadingFn);
 
       abstract ReadSourceDescriptors.Builder<K, V> setKeyDeserializerProvider(
-          @Nullable DeserializerProvider deserializerProvider);
+          @Nullable DeserializerProvider<K> deserializerProvider);
 
       abstract ReadSourceDescriptors.Builder<K, V> setValueDeserializerProvider(
-          @Nullable DeserializerProvider deserializerProvider);
+          @Nullable DeserializerProvider<V> deserializerProvider);
 
       abstract ReadSourceDescriptors.Builder<K, V> setKeyCoder(Coder<K> keyCoder);
 
@@ -2157,9 +2165,8 @@ public class KafkaIO {
     }
 
     /**
-     * Enable committing record offset. If {@link #withReadCommitted()} or {@link
-     * ConsumerConfig#ENABLE_AUTO_COMMIT_CONFIG} is set together with {@link #commitOffsets()},
-     * {@link #commitOffsets()} will be ignored.
+     * Enable committing record offset. If {@link ConsumerConfig#ENABLE_AUTO_COMMIT_CONFIG} is set
+     * together with {@link #commitOffsets()}, {@link #commitOffsets()} will be ignored.
      */
     public ReadSourceDescriptors<K, V> commitOffsets() {
       return toBuilder().setCommitOffsetEnabled(true).build();
@@ -2211,8 +2218,8 @@ public class KafkaIO {
       return toBuilder().setConsumerConfig(consumerConfig).build();
     }
 
-    ReadAllFromRow forExternalBuild() {
-      return new ReadAllFromRow(this);
+    ReadAllFromRow<K, V> forExternalBuild() {
+      return new ReadAllFromRow<>(this);
     }
 
     /**
@@ -2224,7 +2231,7 @@ public class KafkaIO {
 
       private final ReadSourceDescriptors<K, V> readViaSDF;
 
-      ReadAllFromRow(ReadSourceDescriptors read) {
+      ReadAllFromRow(ReadSourceDescriptors<K, V> read) {
         readViaSDF = read;
       }
 
@@ -2238,7 +2245,8 @@ public class KafkaIO {
                     new DoFn<KafkaRecord<K, V>, KV<K, V>>() {
                       @ProcessElement
                       public void processElement(
-                          @Element KafkaRecord element, OutputReceiver<KV<K, V>> outputReceiver) {
+                          @Element KafkaRecord<K, V> element,
+                          OutputReceiver<KV<K, V>> outputReceiver) {
                         outputReceiver.output(element.getKV());
                       }
                     }))
@@ -2284,8 +2292,8 @@ public class KafkaIO {
       if (isCommitOffsetEnabled()) {
         if (configuredKafkaCommit()) {
           LOG.info(
-              "Either read_committed or auto_commit is set together with commitOffsetEnabled but you "
-                  + "only need one of them. The commitOffsetEnabled is going to be ignored");
+              "auto_commit is set together with commitOffsetEnabled but you only need one of them. "
+                  + "The commitOffsetEnabled is going to be ignored");
         }
       }
 
@@ -2349,8 +2357,7 @@ public class KafkaIO {
     }
 
     private boolean configuredKafkaCommit() {
-      return getConsumerConfig().get("isolation.level") == "read_committed"
-          || Boolean.TRUE.equals(getConsumerConfig().get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG));
+      return Boolean.TRUE.equals(getConsumerConfig().get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG));
     }
 
     static class ExtractOutputTimestampFns<K, V> {
@@ -2403,7 +2410,6 @@ public class KafkaIO {
    */
   @AutoValue
   @AutoValue.CopyAnnotations
-  @SuppressWarnings({"rawtypes"})
   public abstract static class WriteRecords<K, V>
       extends PTransform<PCollection<ProducerRecord<K, V>>, PDone> {
     // TODO (Version 3.0): Create the only one generic {@code Write<T>} transform which will be
@@ -2698,7 +2704,6 @@ public class KafkaIO {
    */
   @AutoValue
   @AutoValue.CopyAnnotations
-  @SuppressWarnings({"rawtypes"})
   public abstract static class Write<K, V> extends PTransform<PCollection<KV<K, V>>, PDone> {
     // TODO (Version 3.0): Create the only one generic {@code Write<T>} transform which will be
     // parameterized depending on type of input collection (KV, ProducerRecords, etc). In such case,
@@ -2728,8 +2733,10 @@ public class KafkaIO {
         setTopic(configuration.topic);
 
         Map<String, Object> producerConfig = new HashMap<>(configuration.producerConfig);
-        Class keySerializer = resolveClass(configuration.keySerializer);
-        Class valSerializer = resolveClass(configuration.valueSerializer);
+        Class<Serializer<K>> keySerializer =
+            (Class<Serializer<K>>) resolveClass(configuration.keySerializer);
+        Class<Serializer<V>> valSerializer =
+            (Class<Serializer<V>>) resolveClass(configuration.valueSerializer);
 
         WriteRecords<K, V> writeRecords =
             KafkaIO.<K, V>writeRecords()
@@ -2852,12 +2859,11 @@ public class KafkaIO {
      * @deprecated use {@link WriteRecords} and {@code ProducerRecords} to set publish timestamp.
      */
     @Deprecated
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public Write<K, V> withPublishTimestampFunction(
         KafkaPublishTimestampFunction<KV<K, V>> timestampFunction) {
       return withWriteRecordsTransform(
           getWriteRecordsTransform()
-              .withPublishTimestampFunction(new PublishTimestampFunctionKV(timestampFunction)));
+              .withPublishTimestampFunction(new PublishTimestampFunctionKV<>(timestampFunction)));
     }
 
     /**
@@ -2938,12 +2944,12 @@ public class KafkaIO {
     public PTransform<PCollection<V>, PDone> values() {
       // KafkaValueWrite requires a write transform that can handle null keys.
       // Since it will only pass null, we can re-use the current transform safely
-      @SuppressWarnings("rawtypes")
-      Class<Serializer<K>> onlyNullSerializerClass = (Class) StringSerializer.class;
-
+      // with this nullable key serializer
+      Class<? extends Serializer<K>> nullKeySerializer =
+          (Class<? extends Serializer<K>>) (Class<?>) StringSerializer.class;
       Write<@Nullable K, V> nullKeyWriteTransform =
-          (Write<@Nullable K, V>) this.withKeySerializer(onlyNullSerializerClass);
-      return new KafkaValueWrite<V>(nullKeyWriteTransform);
+          (Write<@Nullable K, V>) this.withKeySerializer(nullKeySerializer);
+      return new KafkaValueWrite<>(nullKeyWriteTransform);
     }
 
     /**
@@ -2984,14 +2990,14 @@ public class KafkaIO {
               .apply(
                   "Kafka values with default key",
                   MapElements.via(
-                      new SimpleFunction<V, KV<@Nullable ?, V>>() {
+                      new SimpleFunction<V, KV<@Nullable Object, V>>() {
                         @Override
-                        public KV<@Nullable ?, V> apply(V element) {
+                        public KV<@Nullable Object, V> apply(V element) {
                           return KV.of(null, element);
                         }
                       }))
-              .setCoder((Coder) KvCoder.of(new NullOnlyCoder<>(), input.getCoder()))
-              .apply(kvWriteTransform);
+              .setCoder(KvCoder.of(new NullOnlyCoder<>(), input.getCoder()))
+              .apply((Write<@Nullable Object, V>) kvWriteTransform);
     }
 
     @Override
@@ -3014,7 +3020,7 @@ public class KafkaIO {
     }
   }
 
-  private static Class resolveClass(String className) {
+  private static Class<?> resolveClass(String className) {
     try {
       return Class.forName(className);
     } catch (ClassNotFoundException e) {

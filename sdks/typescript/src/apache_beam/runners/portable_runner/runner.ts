@@ -16,6 +16,11 @@
  * limitations under the License.
  */
 
+const childProcess = require("child_process");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+
 import { ChannelCredentials } from "@grpc/grpc-js";
 import { GrpcTransport } from "@protobuf-ts/grpc-transport";
 import { Struct } from "../../proto/google/protobuf/struct";
@@ -29,11 +34,14 @@ import { Pipeline } from "../../internal/pipeline";
 import { PipelineResult, Runner } from "../runner";
 import { PipelineOptions } from "../../options/pipeline_options";
 import { JobState_Enum, JobStateEvent } from "../../proto/beam_job_api";
+import { MonitoringInfo } from "../../proto/metrics";
 
 import { ExternalWorkerPool } from "../../worker/external_worker_service";
 import * as environments from "../../internal/environments";
 import * as artifacts from "../artifacts";
 import { Service as JobService } from "../../utils/service";
+
+import * as serialization from "../../serialization";
 
 const TERMINAL_STATES = [
   JobState_Enum.DONE,
@@ -45,17 +53,19 @@ const TERMINAL_STATES = [
 
 type completionCallback = (terminalState: JobStateEvent) => Promise<unknown>;
 
-class PortableRunnerPipelineResult implements PipelineResult {
+class PortableRunnerPipelineResult extends PipelineResult {
   jobId: string;
   runner: PortableRunner;
   completionCallbacks: completionCallback[];
   terminalState?: JobStateEvent;
+  finalMetrics?: MonitoringInfo[];
 
   constructor(
     runner: PortableRunner,
     jobId: string,
     completionCallbacks: completionCallback[]
   ) {
+    super();
     this.runner = runner;
     this.jobId = jobId;
     this.completionCallbacks = completionCallbacks;
@@ -72,6 +82,7 @@ class PortableRunnerPipelineResult implements PipelineResult {
     const state = await this.runner.getJobState(this.jobId);
     if (PortableRunnerPipelineResult.isTerminal(state.state)) {
       this.terminalState = state;
+      this.finalMetrics = await this.rawMetrics();
       for (const callback of this.completionCallbacks) {
         await callback(state);
       }
@@ -110,6 +121,15 @@ class PortableRunnerPipelineResult implements PipelineResult {
     }
     return state;
   }
+
+  async rawMetrics() {
+    if (this.finalMetrics !== undefined) {
+      return this.finalMetrics;
+    } else {
+      const metrics = await this.runner.getJobMetrics(this.jobId);
+      return metrics.metrics!.committed!;
+    }
+  }
 }
 
 export class PortableRunner extends Runner {
@@ -143,6 +163,11 @@ export class PortableRunner extends Runner {
     return this.client;
   }
 
+  async getJobMetrics(jobId: string) {
+    const call = (await this.getClient()).getJobMetrics({ jobId });
+    return await call.response;
+  }
+
   async getJobState(jobId: string) {
     const call = (await this.getClient()).getState({ jobId });
     return await call.response;
@@ -154,10 +179,10 @@ export class PortableRunner extends Runner {
   }
 
   async runPipeline(
-    pipeline: Pipeline,
+    pipeline: runnerApiProto.Pipeline,
     options?: PipelineOptions
   ): Promise<PipelineResult> {
-    return this.runPipelineWithProto(pipeline.getProto(), options);
+    return this.runPipelineWithProto(pipeline, options);
   }
 
   async runPipelineWithProto(
@@ -199,15 +224,52 @@ export class PortableRunner extends Runner {
           pipeline.components!.environments[envId] =
             environments.asExternalEnvironment(env, loopbackAddress);
         } else {
+          // Create a docker environment.
           pipeline.components!.environments[envId] =
             environments.asDockerEnvironment(
               env,
               (options as any)?.sdkContainerImage ||
                 "gcr.io/apache-beam-testing/beam_typescript_sdk:dev"
             );
+          const deps = pipeline.components!.environments[envId].dependencies;
+
+          // Package up this code as a dependency.
+          const result = childProcess.spawnSync("npm", ["pack"], {
+            encoding: "latin1",
+          });
+          if (result.status === 0) {
+            console.debug(result.stdout);
+          } else {
+            throw new Error(result.output);
+          }
+          const packFile = path.resolve(result.stdout.trim());
+          deps.push(fileArtifact(packFile, "beam:artifact:type:npm:v1"));
+
+          // If any dependencies are files, package them up as well.
+          if (fs.existsSync("package.json")) {
+            const packageData = JSON.parse(fs.readFileSync("package.json"));
+            if (packageData.dependencies) {
+              for (const dep in packageData.dependencies) {
+                if (packageData.dependencies[dep].startsWith("file:")) {
+                  const path = packageData.dependencies[dep].substring(5);
+                  deps.push(
+                    fileArtifact(
+                      path,
+                      "beam:artifact:type:npm_dep:v1",
+                      new TextEncoder().encode(dep)
+                    )
+                  );
+                }
+              }
+            }
+          }
         }
       }
     }
+
+    // Note the set of modules that need to be imported in the worker.
+    (options as any).registeredNodeModules =
+      serialization.getRegisteredModules();
 
     // Inform the runner that we'd like to execute this pipeline.
     console.debug("Preparing job.");
@@ -243,7 +305,8 @@ export class PortableRunner extends Runner {
             channelCredentials: ChannelCredentials.createInsecure(),
           })
         ),
-        prepareResponse.stagingSessionToken
+        prepareResponse.stagingSessionToken,
+        "/"
       );
     }
 
@@ -261,4 +324,22 @@ export class PortableRunner extends Runner {
     // once the job has completed.
     return new PortableRunnerPipelineResult(this, jobId, completionCallbacks);
   }
+}
+
+function fileArtifact(
+  filePath: string,
+  roleUrn: string,
+  rolePayload: Uint8Array | undefined = undefined
+) {
+  const hasher = crypto.createHash("sha256");
+  hasher.update(fs.readFileSync(filePath));
+  return runnerApiProto.ArtifactInformation.create({
+    typeUrn: "beam:artifact:type:file:v1",
+    typePayload: runnerApiProto.ArtifactFilePayload.toBinary({
+      path: path.resolve(filePath),
+      sha256: hasher.digest("hex"),
+    }),
+    roleUrn: roleUrn,
+    rolePayload: rolePayload,
+  });
 }

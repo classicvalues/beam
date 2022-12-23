@@ -101,6 +101,7 @@ func init() {
 //
 // New flags that are already put into pipeline options
 // should be added to this map.
+// Don't filter temp_location since we need this included in PipelineOptions to correctly upload heap dumps.
 var flagFilter = map[string]bool{
 	"dataflow_endpoint":              true,
 	"staging_location":               true,
@@ -117,7 +118,6 @@ var flagFilter = map[string]bool{
 	"network":                        true,
 	"subnetwork":                     true,
 	"no_use_public_ips":              true,
-	"temp_location":                  true,
 	"template_location":              true,
 	"worker_machine_type":            true,
 	"min_cpu_platform":               true,
@@ -205,7 +205,10 @@ func Execute(ctx context.Context, p *beam.Pipeline) (beam.PipelineResult, error)
 	if err != nil {
 		return nil, errors.WithContext(err, "creating environment for model pipeline")
 	}
-	model, err := graphx.Marshal(edges, &graphx.Options{Environment: environment})
+	model, err := graphx.Marshal(edges, &graphx.Options{
+		Environment:           environment,
+		PipelineResourceHints: jobopts.GetPipelineResourceHints(),
+	})
 	if err != nil {
 		return nil, errors.WithContext(err, "generating model pipeline")
 	}

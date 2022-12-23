@@ -100,13 +100,13 @@ linter:
     use_if_null_to_convert_nulls_to_bools: true
     use_is_even_rather_than_modulo: true
     use_raw_strings: true
-    use_setters_to_change_properties: true
     use_to_and_as_if_applicable: true
 
     #Turn off those on by default:
     avoid_web_libraries_in_flutter: false
     avoid_print: false
     prefer_interpolation_to_compose_strings: false
+    use_key_in_widget_constructors: false
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
