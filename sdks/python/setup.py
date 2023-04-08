@@ -236,7 +236,7 @@ if __name__ == '__main__':
         'fasteners>=0.3,<1.0',
         'grpcio>=1.33.1,!=1.48.0,<2',
         'hdfs>=2.1.0,<3.0.0',
-        'httplib2>=0.8,<0.22.0',
+        'httplib2>=0.8,<0.23.0',
         # numpy can have breaking changes in minor versions.
         # Use a strict upper bound.
         'numpy>=1.14.3,<1.25.0',   # Update build-requirements.txt as well.
@@ -264,10 +264,10 @@ if __name__ == '__main__':
       # BEAM-8840: Do NOT use tests_require or setup_requires.
       extras_require={
           'docs': [
-              'Sphinx>=1.5.2,<2.0',
+              'Sphinx>=1.5.2,<7.0',
               # Pinning docutils as a workaround for Sphinx issue:
               # https://github.com/sphinx-doc/sphinx/issues/9727
-              'docutils==0.17.1',
+              'docutils==0.19',
               'pandas<2.0.0',
           ],
           'test': [
@@ -275,7 +275,7 @@ if __name__ == '__main__':
             'joblib>=1.0.1',
             'mock>=1.0.1,<6.0.0',
             'pandas<2.0.0',
-            'parameterized>=0.7.1,<0.9.0',
+            'parameterized>=0.7.1,<0.10.0',
             'pyhamcrest>=1.9,!=1.10.0,<2.0.0',
             'pyyaml>=3.12,<7.0.0',
             'requests_mock>=1.7,<2.0',
@@ -324,7 +324,7 @@ if __name__ == '__main__':
             'ipywidgets>=8,<9',
             # Skip version 6.1.13 due to
             # https://github.com/jupyter/jupyter_client/issues/637
-            'jupyter-client>=6.1.11,!=6.1.13,<8.0.4',
+            'jupyter-client>=6.1.11,!=6.1.13,<8.1.1',
             'timeloop>=1.0.2,<2',
           ],
           'interactive_test': [
