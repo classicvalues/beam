@@ -75,7 +75,7 @@ jobs:
           comment_phrase: 'Run Java_Flink_Versions PreCommit'
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Java
-        uses: actions/setup-java@v3.8.0
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '8'

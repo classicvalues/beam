@@ -90,7 +90,7 @@ jobs:
           requires-py-39: false
           requires-go: false
       - name: Set up Java${{ matrix.java_version }}
-        uses: actions/setup-java@v3.8.0
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java_version }}
