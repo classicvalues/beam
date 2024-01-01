@@ -79,7 +79,7 @@ jobs:
           distribution: 'zulu'
           java-version: '8'
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.16'
       - name: Install Python
