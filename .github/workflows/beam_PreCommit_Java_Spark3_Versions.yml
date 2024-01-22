@@ -98,7 +98,7 @@ jobs:
           gradle-command: :runners:spark:3:sparkVersionsTest
           arguments: -PdisableSpotlessCheck=true
       - name: Upload test report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: java-code-coverage-report
           path: "**/build/test-results/**/*.xml"

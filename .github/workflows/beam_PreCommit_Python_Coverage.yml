@@ -90,7 +90,7 @@ jobs:
         with:
           gradle-command: :sdks:python:test-suites:tox:py38:preCommitPyCoverage
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-code-coverage-report
           path: "**/pytest*.xml"

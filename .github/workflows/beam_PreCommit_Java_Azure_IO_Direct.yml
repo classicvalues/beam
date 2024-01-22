@@ -102,12 +102,12 @@ jobs:
             -PdisableSpotlessCheck=true \
             -PdisableCheckStyle=true \
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: java-code-coverage-report
           path: "**/build/test-results/**/*.xml"
       - name: Archive SpotBugs Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: SpotBugs Results
           path: "**/build/reports/spotbugs/*.html"

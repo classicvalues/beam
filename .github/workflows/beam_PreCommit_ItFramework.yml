@@ -89,7 +89,7 @@ jobs:
       - name: run ItFrameworkPrecommit script
         run: ./gradlew -p it build
       - name: Upload test report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: java-code-coverage-report
           path: "**/build/test-results/**/*.xml"

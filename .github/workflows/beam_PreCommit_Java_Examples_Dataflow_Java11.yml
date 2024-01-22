@@ -111,7 +111,7 @@ jobs:
             -PcompileAndRunTestsWithJava11 \
             -Pjava11Home=$JAVA_HOME_11_X64 \
       - name: Upload test report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: java-code-coverage-report
           path: "**/build/test-results/**/*.xml"

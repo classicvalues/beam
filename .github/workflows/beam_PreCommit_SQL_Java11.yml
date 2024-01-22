@@ -102,12 +102,12 @@ jobs:
             -PskipCheckerFramework \
             -Pjava11Home=$JAVA_HOME_11_X64 \
       - name: Archive JUnit Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: JUnit Test Results
           path: '**/build/test-results/**/*.xml'
       - name: Archive SpotBugs Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: SpotBugs Results
           path: '**/build/reports/spotbugs/*.html'
