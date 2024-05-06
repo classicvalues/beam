@@ -155,7 +155,7 @@ typing_extensions==4.5.0
 uritemplate==4.1.1
 urllib3==1.26.16
 websocket-client==1.6.1
-Werkzeug==2.3.6
+Werkzeug==3.0.3
 wrapt==1.15.0
 zipp==3.16.2
 zstandard==0.21.0
