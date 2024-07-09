@@ -157,5 +157,5 @@ urllib3==1.26.16
 websocket-client==1.6.1
 Werkzeug==2.3.6
 wrapt==1.15.0
-zipp==3.16.2
+zipp==3.19.1
 zstandard==0.21.0
